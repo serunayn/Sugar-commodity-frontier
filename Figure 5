@@ -1,0 +1,191 @@
+# Load required packages (install if not available)
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+if (!requireNamespace("scales", quietly = TRUE)) install.packages("scales")
+
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+plot_total_sugar_production <- function(region_data,
+                                        region_name,
+                                        historical_empire = NULL,
+                                        region_big = NULL,
+                                        subregion = NULL,
+                                        empire = NULL,
+                                        selected_countries = NULL,
+                                        exclude_countries = NULL,
+                                        group_by_region = FALSE,
+                                        group_by_subregion = FALSE,
+                                        group_by_empire = FALSE,
+                                        group_by_historical_empire = FALSE,
+                                        start_year,
+                                        end_year,
+                                        custom_colors = NULL,
+                                        vline_events = NULL,    # New: vertical line events
+                                        annotations = NULL) {     # Extra arbitrary annotations
+  # ---------------------------------------------------------------------------
+  # 1. Filter Data
+  # ---------------------------------------------------------------------------
+  region_filtered <- region_data %>%
+    filter(between(Year, start_year, end_year),
+           !is.na(Total_Sugar_Production))
+  
+  if (!is.null(historical_empire)) {
+    region_filtered <- region_filtered %>%
+      filter(`Historical empire` %in% historical_empire)
+  }
+  if (!is.null(region_big)) {
+    region_filtered <- region_filtered %>%
+      filter(`Region Big` %in% region_big)
+  }
+  if (!is.null(subregion)) {
+    region_filtered <- region_filtered %>%
+      filter(`Subregion` %in% subregion)
+  }
+  if (!is.null(empire)) {
+    region_filtered <- region_filtered %>%
+      filter(`Empire` %in% empire)
+  }
+  if (!is.null(selected_countries)) {
+    region_filtered <- region_filtered %>%
+      filter(`Modern name` %in% selected_countries)
+  }
+  if (!is.null(exclude_countries)) {
+    region_filtered <- region_filtered %>%
+      filter(!(`Modern name` %in% exclude_countries))
+  }
+  
+  # ---------------------------------------------------------------------------
+  # 2. Group Data and Set the Color Variable
+  # ---------------------------------------------------------------------------
+  # Default grouping: each country gets its own line
+  color_variable <- "Modern name"
+  
+  if (group_by_empire) {
+    region_filtered <- region_filtered %>%
+      group_by(Year, `Empire`) %>%
+      summarize(Total_Sugar_Production = sum(Total_Sugar_Production, na.rm = TRUE),
+                .groups = 'drop')
+    color_variable <- "Empire"
+    
+  } else if (group_by_historical_empire) {
+    region_filtered <- region_filtered %>%
+      group_by(Year, `Historical empire`) %>%
+      summarize(Total_Sugar_Production = sum(Total_Sugar_Production, na.rm = TRUE),
+                .groups = 'drop')
+    color_variable <- "Historical empire"
+    
+  } else if (group_by_region) {
+    region_filtered <- region_filtered %>%
+      filter(`Modern name` != region_name) %>%
+      group_by(Year, `Region Big`) %>%
+      summarize(Total_Sugar_Production = sum(Total_Sugar_Production, na.rm = TRUE),
+                .groups = 'drop')
+    color_variable <- "Region Big"
+    
+  } else if (group_by_subregion) {
+    region_filtered <- region_filtered %>%
+      group_by(Year, `Subregion`) %>%
+      summarize(Total_Sugar_Production = sum(Total_Sugar_Production, na.rm = TRUE),
+                .groups = 'drop')
+    color_variable <- "Subregion"
+  }
+  
+  # ---------------------------------------------------------------------------
+  # 3. Create the Plot (presenting the y-axis in kilotons, larger text, no title)
+  # ---------------------------------------------------------------------------
+  # Compute the maximum production value (in metric tons) for annotation placement.
+  max_prod <- max(region_filtered$Total_Sugar_Production, na.rm = TRUE)
+  
+  p <- ggplot(region_filtered, aes(x = Year, y = Total_Sugar_Production,
+                                   color = .data[[color_variable]])) +
+    geom_line(linewidth = 0.5) +
+    geom_point(size = 1) +
+    # Removed title; only x and y labels are provided
+    labs(x = "Year",
+					y = expression("Sugar Production (kt " ~ y^{-1} ~ ")")) +
+    # Increase base font size for all text elements and remove legend title
+    theme_minimal(base_size = 16) +
+    theme(legend.position = "bottom",
+          legend.title = element_blank()) +
+    # Divide tick values by 1,000 for display (metric tons to kilotons)
+    scale_y_continuous(labels = function(x) scales::comma(x / 1000))
+  
+  # Apply custom colors if provided
+  if (!is.null(custom_colors)) {
+    p <- p + scale_color_manual(values = custom_colors)
+  }
+  
+  # ---------------------------------------------------------------------------
+  # 4. Add Vertical Dashed Line Events (with annotations)
+  # ---------------------------------------------------------------------------
+  # Define default events (built in) if no extra events are provided
+  built_in_events <- data.frame(
+    year = c(1807),
+    label = c("Abolition of Slave Trade"),
+    stringsAsFactors = FALSE
+  )
+  
+  # Combine built-in events with user-specified events (if any)
+  if (!is.null(vline_events)) {
+    events <- rbind(built_in_events, vline_events)
+  } else {
+    events <- built_in_events
+  }
+  
+  # Loop over events to add a vertical dashed line and an annotation for each
+  for(i in 1:nrow(events)) {
+    event_year <- events$year[i]
+    event_label <- events$label[i]
+    p <- p +
+      geom_vline(xintercept = event_year, linetype = "dashed", color = "black") +
+      annotate("text", x = event_year, y = max_prod, label = event_label,
+               angle = 90, vjust = -0.5, hjust = 1, size = 5, color = "black")
+  }
+  
+  # ---------------------------------------------------------------------------
+  # 5. Add Any Extra User-Specified Annotations
+  # ---------------------------------------------------------------------------
+  if (!is.null(annotations)) {
+    for (ann in annotations) {
+      p <- p + ann
+    }
+  }
+  
+  # Return the plot object so that further customization is possible if desired
+  return(p)
+}
+
+# -----------------------------------------------------------------------------
+# Example usage:
+# -----------------------------------------------------------------------------
+# (Assuming `global_combined_expanded` is your data frame)
+custom_colors <- c("North America" = "blue")
+
+# Define extra vertical line events as a data frame (optional)
+extra_events <- data.frame(
+  year = c(1791, 1832),
+  label = c("Haitian Revolution", "Jamaican uprising"),
+  stringsAsFactors = FALSE
+)
+
+p <- plot_total_sugar_production(
+  region_data         = global_combined_expanded,
+  region_name         = "Selected Countries",
+  exclude_countries   = c("Caribbean", "Asia", "Europe", "South America",
+                          "North America", "Central America", "Africa", "Oceania"),
+  selected_countries  = c("Jamaica", "Barbados",
+                          "Fiji", "Haiti", "Mauritius", "Australia"),
+  group_by_subregion  = FALSE,
+  group_by_region     = FALSE,
+  group_by_empire     = FALSE,
+  group_by_historical_empire = FALSE,
+  start_year          = 1650,
+  end_year            = 1914,
+  custom_colors       = NULL,          # or use custom_colors
+  vline_events        = extra_events,  # add extra vertical line events here
+)
+
+# To display the plot:
+print(p)
