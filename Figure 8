@@ -1,0 +1,49 @@
+# Load necessary libraries
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+if (!requireNamespace("scales", quietly = TRUE)) install.packages("scales")
+
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+# Filter for multiple countries (e.g., Australia, Mauritius, etc.)
+selected_countries <- c("Guyana", "Barbados", "Mauritius", "Fiji")
+multi_country_data <- global_combined_expanded %>%
+  filter(`Modern name` %in% selected_countries) %>%
+  filter(Year >= 1800 & Year <= 2020, Export > 0) %>%
+  mutate(Export_to_Production_Ratio = Export / Total_Sugar_Production)
+
+# Faceted line plot
+ggplot(multi_country_data, aes(x = Year)) +
+  geom_line(aes(y = Total_Sugar_Production / 1000, color = "Production"), size = 1.2) +  # Convert to kilotons
+  geom_line(aes(y = Export / 1000, color = "Exports"), size = 1.2) +  # Convert to kilotons
+  geom_point(aes(
+    y = (Export_to_Production_Ratio * max(Total_Sugar_Production / 1000, na.rm = TRUE)), 
+    color = "Export/Production Ratio"
+  ), size = 2) +
+  scale_color_manual(values = c("Production" = "blue", "Exports" = "red", "Export/Production Ratio" = "light green")) +
+  scale_y_continuous(
+    name = expression("Sugar Mass (kt " ~ y^{-1} ~ ")"), 
+    sec.axis = sec_axis(
+      ~ . / max(multi_country_data$Total_Sugar_Production / 1000, na.rm = TRUE), 
+      name = "Export-to-Production Ratio"
+    ),
+    labels = label_comma()
+  ) +
+  labs(
+    x = "Year",
+    color = ""
+  ) +
+  facet_wrap(~`Modern name`, scales = "free_y") +  # Create separate panels for each country
+  theme_minimal() +
+  theme(
+    text = element_text(size = 16),         # Base text size
+    axis.title = element_text(size = 14),  # Axis title size
+    axis.text = element_text(size = 14),   # Axis text size
+    legend.title = element_text(size = 16), # Legend title size
+    legend.text = element_text(size = 14),  # Legend text size
+    strip.text = element_text(size = 16),   # Facet label size
+    plot.title = element_blank(),           # Remove the top title
+    legend.position = "bottom"            # Move legend to the bottom
+  )
