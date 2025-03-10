@@ -1,0 +1,96 @@
+# Check and install necessary packages
+required_packages <- c("ggplot2", "dplyr", "scales", "ggrepel", "gridExtra")
+
+for (pkg in required_packages) {
+  if (!require(pkg, character.only = TRUE)) {
+    install.packages(pkg)
+    library(pkg, character.only = TRUE)
+  }
+}
+
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(gridExtra)
+
+# Function to create scatter plots and return data
+create_scatter_plot <- function(data, start_year, end_year, x_limits = NULL, y_limits = NULL) {
+  # Filter for the desired period and ignore rows where Export is zero
+  period_data <- data %>%
+    filter(Year >= start_year & Year <= end_year, Export > 0, Export / Total_Sugar_Production <= 1.1) %>%
+    mutate(Export_to_Production_Ratio = Export / Total_Sugar_Production)
+  
+  # Calculate averages for the period
+  averaged_data <- period_data %>%
+    group_by(`Modern name`) %>%
+    summarise(
+      Avg_Production = mean(Total_Sugar_Production / 1000, na.rm = TRUE),
+      Avg_Export = mean(Export / 1000, na.rm = TRUE),
+      Avg_Export_to_Production_Ratio = mean(Export_to_Production_Ratio, na.rm = TRUE)
+    )
+  
+  # Scatter plot for averaged data
+  plot <- ggplot(averaged_data, aes(x = Avg_Production, y = Avg_Export, label = `Modern name`)) +
+    geom_point(aes(color = Avg_Export_to_Production_Ratio), size = 3) +
+    geom_text(hjust = 1.1, vjust = 1.1, size = 3, color = "black") +  # Label all points
+    scale_color_gradient(
+      low = "blue", 
+      high = "red", 
+      limits = c(0, 1), 
+      breaks = seq(0, 1, by = .5)
+    ) +
+    scale_x_continuous(
+      labels = label_number(scale = 1, accuracy = 1),
+      limits = x_limits  # Dynamically set x-axis limits
+    ) +
+    scale_y_continuous(
+      labels = label_number(scale = 1, accuracy = 1),
+      limits = y_limits  # Dynamically set y-axis limits
+    ) +
+    labs(
+      title = paste(start_year, "to", end_year),
+      x = expression("Average Annual Sugar Production (kt " ~ y^{-1} ~ ")"),
+      y = expression("Average Annual Sugar Exports (kt " ~ y^{-1} ~ ")"), 
+      color = "Export-to-Production Ratio"
+    ) +
+    coord_equal() +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",  # Move legend to the bottom
+      text = element_text(size = 14),         # Base text size
+      axis.title = element_text(size = 14),     # Axis title size
+      axis.text = element_text(size = 12),      # Axis text size
+      legend.title = element_text(size = 12),   # Legend title size
+      legend.text = element_text(size = 12)       # Legend text size
+    )
+  
+  list(plot = plot, data = averaged_data)
+}
+
+# Create two scatter plots and get the data
+result1 <- create_scatter_plot(global_combined_expanded, 1720, 1914, x_limits = c(0, 150), y_limits = c(0, 150))
+result2 <- create_scatter_plot(global_combined_expanded, 1975, 2022, x_limits = c(0, 400), y_limits = c(0, 400))
+
+# Extract plots
+plot1 <- result1$plot
+plot2 <- result2$plot
+
+# Extract data and find top 10 countries
+top10_1720_1914 <- result1$data %>%
+  arrange(desc(Avg_Export_to_Production_Ratio)) %>%
+  slice_head(n = 10)
+
+top10_1975_2022 <- result2$data %>%
+  arrange(desc(Avg_Export_to_Production_Ratio)) %>%
+  slice_head(n = 10)
+
+# Arrange the plots side by side
+grid.arrange(
+  plot1 + ggtitle("1720 - 1914"),
+  plot2 + ggtitle("1975 - 2022"),
+  ncol = 2
+)
+
+# Display top 10 countries for each plot
+top10_1720_1914
+top10_1975_2022
