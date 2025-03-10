@@ -1,0 +1,166 @@
+if (!require("rnaturalearth")) install.packages("rnaturalearth")
+if (!require("rnaturalearthdata")) install.packages("rnaturalearthdata")
+if (!require("ggplot2")) install.packages("ggplot2")
+if (!require("dplyr")) install.packages("dplyr")
+
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(ggplot2)
+library(dplyr)
+library(sf)
+library(gridExtra)
+
+# Load Natural Earth country data
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Create a lookup table to map mismatched country names
+lookup_table <- data.frame(
+  original_name = c("Lao People's Democratic Republic", "Syrian Arab Republic", "Türkiye", "Viet Nam", 
+                    "Democratic Republic of the Congo", "Eswatini", "Bahamas", "Congo", "East Germany", 
+                    "Germany (Added East and West)", "United Kingdom of Great Britain and Northern Ireland", 
+                    "Uk Great Britain", "Tanzania", "Sudan (former)", "Russia USSR", "Russian Federation", 
+                    "Republic of Moldova", "Netherlands (Kingdom of the)", "Macedonia", "Belgium-Luxembourg", 
+                    "CROATIA-SLAVONIA", "Côte d'Ivoire", "Kyrgistan", "Serbia", "Serbia and Montenegro", "USA", 
+                    "USSR", "Madeira", "Sao Tome"),
+  corrected_name = c("Laos", "Syria", "Turkey", "Vietnam", "Congo", "eSwatini", "The Bahamas", 
+                     "Democratic Republic of the Congo", "Germany", "Germany", "United Kingdom", 
+                     "United Kingdom", "United Republic of Tanzania", "Sudan", "Russia", "Russia", 
+                     "Moldova", "Netherlands", "North Macedonia", "Belgium", "Croatia", "Ivory Coast", 
+                     "Kyrgyzstan", "Republic of Serbia", "Montenegro", "United States of America", "Russia", 
+                     "Portugal", "Portugal")
+)
+
+# Join the lookup table with the global_combined_expanded dataset to add the corrected names
+global_combined_expanded_matched <- global_combined_expanded %>%
+  left_join(lookup_table, by = c("Modern name" = "original_name")) %>%
+  mutate(`Modern name` = ifelse(!is.na(corrected_name), corrected_name, `Modern name`)) %>%
+  select(-corrected_name)  # Drop the helper column
+
+plot_sugar_total_map <- function(data, start_year, end_year, region = "World", labels = NULL, palette = "Oranges", zoom_coords = NULL) {
+  # Filter data for the specified year range
+  filtered_data <- data %>%
+    filter(Year >= start_year & Year <= end_year) %>%
+    group_by(`Modern name`) %>%
+    summarise(Total_Sugar_Production = sum(Total_Sugar_Production, na.rm = TRUE))
+  
+  # Load Natural Earth country data
+  world <- ne_countries(scale = "medium", returnclass = "sf")
+  
+  # Filter for the specified region or subregion
+  if (region != "World") {
+    if (region %in% unique(world$region_un)) {
+      world <- world %>% filter(region_un == region)
+    } else if (region %in% unique(world$subregion)) {
+      world <- world %>% filter(subregion == region)
+    } else {
+      stop(paste("Region or subregion", region, "not found in the dataset."))
+    }
+  }
+  
+  # Merge with production data
+  combined_data <- world %>%
+    left_join(filtered_data, by = c("admin" = "Modern name"))
+  
+  # Calculate centroids for labeling
+  combined_data <- combined_data %>%
+    mutate(label_position = st_centroid(geometry))
+  
+  # Extract coordinates for centroids
+  label_coords <- st_coordinates(combined_data$label_position)
+  combined_data <- combined_data %>%
+    mutate(
+      label_x = label_coords[, 1],
+      label_y = label_coords[, 2]
+    )
+  
+  # Handle labels parameter properly
+  if (is.character(labels)) {
+    if (identical(labels, "all")) {
+      labeled_countries <- combined_data %>% filter(!is.na(Total_Sugar_Production))
+    } else {
+      labeled_countries <- combined_data %>% filter(admin %in% labels)
+    }
+  } else {
+    labeled_countries <- NULL
+  }
+  
+  p <- ggplot(data = combined_data) +
+    geom_sf(aes(fill = Total_Sugar_Production / 1000)) +  # Divide by 1000 for kilotons
+    scale_fill_distiller(
+      palette = palette,
+      direction = 1,
+      na.value = "grey90",
+      labels = scales::label_comma()
+    ) +
+    theme_minimal() +
+    theme(
+      text = element_text(size = 14),
+      legend.title = element_text(size = 10),
+      legend.text = element_text(size = 12),
+      plot.title = element_text(size = 18, face = "bold"),
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      panel.grid = element_blank(),
+      plot.margin = unit(c(1,1,1,1), "mm")
+    ) +
+    labs(
+      title = paste(start_year, "-", end_year, sep = ""),
+      fill = "Total Production (Kilotons)"
+    )
+  
+  # Add labels if provided
+  if (!is.null(labeled_countries)) {
+    p <- p +
+      geom_label(
+        data = labeled_countries,
+        aes(x = label_x, y = label_y, label = admin),
+        size = 4, color = "black", fill = "white", label.padding = unit(0.15, "lines")
+      )
+  }
+  
+  # Apply zoom if coordinates are provided
+  if (!is.null(zoom_coords)) {
+    p <- p +
+      coord_sf(
+        xlim = zoom_coords$xlim, 
+        ylim = zoom_coords$ylim, 
+        expand = FALSE
+      )
+  }
+  
+  return(p)
+}
+
+# Define individual zoom coordinates for each plot
+zoom_coords_list <- list(
+  list(xlim = c(-80, 0), ylim = c(-5, 50)),    # Atlantic
+  list(xlim = c(-68, -58), ylim = c(11, 20)),   # Caribbean
+  list(xlim = c(-90, -30), ylim = c(0, 30)),     # Wider Atlantic region
+  NULL, NULL, NULL
+)
+
+# Generate individual maps for different time periods and add custom titles to each map
+maps <- lapply(seq_along(zoom_coords_list), function(i) {
+  p <- plot_sugar_total_map(
+    data = global_combined_expanded_matched,
+    start_year = c(1420, 1620, 1720, 1790, 1914, 1975)[i],
+    end_year = c(1620, 1720, 1790, 1914, 1975, 2022)[i],
+    region = "World",
+    labels = NULL,
+    palette = "YlGnBu",
+    zoom_coords = zoom_coords_list[[i]]
+  )
+  # Define custom title for each map
+  custom_title <- switch(i,
+                         "1" = "a. 1420 - 1620",
+                         "2" = "b. 1620 - 1720 (Caribbean)",
+                         "3" = "c. 1720 - 1790",
+                         "4" = "d. 1790 - 1914",
+                         "5" = "e. 1914 - 1975",
+                         "6" = "f. 1975 - 2022")
+  p + ggtitle(custom_title)
+})
+
+# Combine the maps into one figure (3 rows, 2 columns)
+combined_maps <- grid.arrange(grobs = maps, ncol = 2)
