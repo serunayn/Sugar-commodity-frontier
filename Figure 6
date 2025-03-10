@@ -1,0 +1,28 @@
+library(ggplot2)
+library(dplyr)
+library(scales) # For label_comma
+
+# Filter for multiple countries (e.g., Dominican Republic, Barbados, etc.)
+selected_countries <- c("Dominican Republic", "Barbados", "Guadeloupe", 
+                        "Guyana", "Fiji", "Trinidad and Tobago", 
+                        "Martinique", "Jamaica", "Cuba")
+multi_country_data <- global_combined_expanded %>%
+  filter(`Modern name` %in% selected_countries)
+
+# Faceted line plot with adjustments and larger text
+ggplot(multi_country_data, aes(x = Year)) +
+  geom_line(aes(y = Total_Sugar_Production, color = "Production"), size = 1.2) +
+  geom_line(aes(y = Export, color = "Exports"), size = 1.2) +
+  scale_color_manual(values = c("Production" = "blue", "Exports" = "red")) +
+  # Convert metric ton values to kilotons for display (divide by 1000)
+  scale_y_continuous(labels = function(x) scales::comma(x / 1000)) +
+  labs(
+    x = "Year",
+		y = expression("Sugar Mass (kt " ~ y^{-1} ~ ")"),
+    color = ""
+  ) +
+  facet_wrap(~`Modern name`, scales = "free_y") +
+  theme_minimal(base_size = 16) +      # Increase overall text size
+  theme(
+    legend.position = "bottom"        # Place the legend at the bottom
+  )
