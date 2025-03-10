@@ -1,0 +1,84 @@
+library(dplyr)
+library(ggplot2)
+library(tidyr)  # For pivot_longer
+
+# Specify year range
+start_year <- 1986
+end_year <- 2020
+
+# Step 1: Get relevant countries from filtered_UK_data
+uk_countries <- filtered_UK_data$`Modern name`
+
+# Step 2: Summarize production, export, and import for the year range
+# Summarize production data
+production_data <- global_combined_expanded %>%
+  filter(`Modern name` %in% uk_countries, 
+         !`Modern name` %in% c("Brazil", "France"), 
+         Year >= start_year, Year <= end_year) %>%
+  group_by(`Modern name`) %>%
+  summarise(Total_Production = sum(Total_Sugar_Production, na.rm = TRUE))
+
+# Summarize export data
+export_data <- global_combined_expanded %>%
+  filter(`Modern name` %in% uk_countries, 
+         !`Modern name` %in% c("Brazil", "France"), 
+         Year >= start_year, Year <= end_year) %>%
+  group_by(`Modern name`) %>%
+  summarise(Total_Export = sum(Export, na.rm = TRUE))
+
+# Summarize import data into the UK
+import_data <- filtered_UK_data %>%
+  filter(Year >= start_year, Year <= end_year, 
+         !`Modern name` %in% c("Brazil", "France")) %>%
+  group_by(`Modern name`) %>%
+  summarise(Total_Import = sum(`Value (mt)`, na.rm = TRUE))
+
+
+# Step 3: Combine the datasets
+combined_data <- production_data %>%
+  left_join(export_data, by = "Modern name") %>%
+  left_join(import_data, by = "Modern name")
+
+# Pivot the data into long format for ggplot compatibility
+plot_data <- combined_data %>%
+  pivot_longer(
+    cols = c(Total_Production, Total_Export, Total_Import),
+    names_to = "Metric",
+    values_to = "Value"
+  ) %>%
+  mutate(Metric = factor(Metric, levels = c("Total_Production", "Total_Export", "Total_Import"),
+                         labels = c("Total Production", "Total Export", "Total Import into the UK")))
+
+# Plot the bar chart
+ggplot(plot_data, aes(x = `Modern name`, y = Value / 1000, fill = Metric)) +  # Convert to kilotons
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous(labels = scales::label_comma()) +  # Use commas for kiloton values
+  labs(
+    x = "",
+    y = "Summed Mass (kt)",
+    fill = ""
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 16),         # Base text size
+    axis.title = element_text(size = 18),  # Axis title size
+    axis.text = element_text(size = 14),   # Axis text size
+    legend.title = element_text(size = 16), # Legend title size
+    legend.text = element_text(size = 14),  # Legend text size
+    plot.title = element_blank(),           # Remove the top title
+    legend.position = "bottom",           # Move legend to the bottom
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+# Add percentage calculations
+combined_data_2 <- combined_data %>%
+  mutate(
+    Export_Percentage = (Total_Export / Total_Production) * 100,       # % of production exported
+    Import_Percentage = (Total_Import / Total_Export) * 100,           # % of export imported into the UK
+    Import_Percentage_Production = (Total_Import / Total_Production) * 100
+  )
+
+# View the final combined data with percentages
+combined_data_2 %>%
+  select(`Modern name`, 
+         Export_Percentage, Import_Percentage, Import_Percentage_Production)
