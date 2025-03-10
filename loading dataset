@@ -1,0 +1,53 @@
+if (!require(googlesheets4)) install.packages("googlesheets4")
+if (!require(dplyr)) install.packages("dplyr")
+library(googlesheets4)
+library(dplyr)
+
+# Load the Google Sheet
+sheet_urlnew <- "https://docs.google.com/spreadsheets/d/1LCPjAVNQFJj7iKCkTn_nRHra-NM9EKb07ZfQwU5EBtk/edit?gid=1171229826#gid=1171229826" 
+
+# Read the sheets into R 
+global_combined <- read_sheet(sheet_urlnew, "global combined")
+regional_sums <- read_sheet(sheet_urlnew, "regional sums")
+
+#specify column types 
+country_and_region <- read_sheet(
+  sheet_urlnew,
+  sheet = "country and region",
+  col_types = "ncnnnnnnnnnn"  # Specify column types in order
+)
+
+# specify column types
+global_combined_expanded <- read_sheet(
+  sheet_urlnew,
+  sheet = "global combined expanded",
+  col_types = "ncnnnnnnnnnnccccc" 
+)
+
+#UK and France FAO stuff 
+UK_Trade <- read_sheet(sheet_urlnew, sheet = "UK Trade")
+
+# Filter the dataset for "Import", "Raw", the years 1986–2022, and non-NA Modern names
+filtered_UK_Trade <- UK_Trade %>%
+  filter(
+    Category == "Import", 
+    `Raw Refined` == "Raw", 
+    Year >= 1986, 
+    Year <= 2022, 
+    !is.na(`Modern name`)  # Exclude rows with NA in Modern name
+  )
+
+# Calculate the average value for each Partner Country and find the top 10 importers
+top_countries <- filtered_UK_Trade %>%
+  group_by(`Modern name`) %>%
+  summarise(Average_Value = mean(`Value (mt)`, na.rm = TRUE)) %>%
+  arrange(desc(Average_Value)) %>%
+  slice(1:10)
+
+# Filter the original dataset to include only the top 10 Partner Countries
+filtered_UK_data <- filtered_UK_Trade %>%
+  filter(`Modern name` %in% top_countries$`Modern name`)
+
+# View the resulting top countries and filtered dataset
+top_countries  # Top 10 countries by average value
+filtered_UK_data  # Filtered data for the top 10
