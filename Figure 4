@@ -1,0 +1,141 @@
+# Load required packages (install if not available)
+if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+if (!requireNamespace("scales", quietly = TRUE)) install.packages("scales")
+
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+plot_total_sugar_production <- function(region_data,
+                                        region_name,
+                                        historical_empire = NULL,
+                                        region_big = NULL,
+                                        subregion = NULL,
+                                        empire = NULL,
+                                        selected_countries = NULL,
+                                        exclude_countries = NULL,
+                                        group_by_region = FALSE,
+                                        group_by_subregion = FALSE,
+                                        group_by_empire = FALSE,
+                                        group_by_historical_empire = FALSE,
+                                        start_year,
+                                        end_year,
+                                        custom_colors = NULL) {
+  # ---------------------------------------------------------------------------
+  # 1. Filter Data
+  # ---------------------------------------------------------------------------
+  region_filtered <- region_data %>%
+    filter(between(Year, start_year, end_year),
+           !is.na(Total_Sugar_Production))
+  
+  if (!is.null(historical_empire)) {
+    region_filtered <- region_filtered %>%
+      filter(`Historical empire` %in% historical_empire)
+  }
+  if (!is.null(region_big)) {
+    region_filtered <- region_filtered %>%
+      filter(`Region Big` %in% region_big)
+  }
+  if (!is.null(subregion)) {
+    region_filtered <- region_filtered %>%
+      filter(`Subregion` %in% subregion)
+  }
+  if (!is.null(empire)) {
+    region_filtered <- region_filtered %>%
+      filter(`Empire` %in% empire)
+  }
+  if (!is.null(selected_countries)) {
+    region_filtered <- region_filtered %>%
+      filter(`Modern name` %in% selected_countries)
+  }
+  if (!is.null(exclude_countries)) {
+    region_filtered <- region_filtered %>%
+      filter(!(`Modern name` %in% exclude_countries))
+  }
+  
+  # ---------------------------------------------------------------------------
+  # 2. Group Data and Set the Color Variable
+  # ---------------------------------------------------------------------------
+  # Default grouping: each country gets its own line
+  color_variable <- "Modern name"
+  
+  if (group_by_empire) {
+    region_filtered <- region_filtered %>%
+      group_by(Year, `Empire`) %>%
+      summarize(Total_Sugar_Production = sum(Total_Sugar_Production, na.rm = TRUE),
+                .groups = 'drop')
+    color_variable <- "Empire"
+    
+  } else if (group_by_historical_empire) {
+    region_filtered <- region_filtered %>%
+      group_by(Year, `Historical empire`) %>%
+      summarize(Total_Sugar_Production = sum(Total_Sugar_Production, na.rm = TRUE),
+                .groups = 'drop')
+    color_variable <- "Historical empire"
+    
+  } else if (group_by_region) {
+    region_filtered <- region_filtered %>%
+      filter(`Modern name` != region_name) %>%
+      group_by(Year, `Region Big`) %>%
+      summarize(Total_Sugar_Production = sum(Total_Sugar_Production, na.rm = TRUE),
+                .groups = 'drop')
+    color_variable <- "Region Big"
+    
+  } else if (group_by_subregion) {
+    region_filtered <- region_filtered %>%
+      group_by(Year, `Subregion`) %>%
+      summarize(Total_Sugar_Production = sum(Total_Sugar_Production, na.rm = TRUE),
+                .groups = 'drop')
+    color_variable <- "Subregion"
+  }
+  
+  # ---------------------------------------------------------------------------
+  # 3. Create the Plot (presenting the y-axis in kilotons, larger text, no title)
+  # ---------------------------------------------------------------------------
+  p <- ggplot(region_filtered, aes(x = Year, y = Total_Sugar_Production,
+                                   color = .data[[color_variable]])) +
+    geom_line(linewidth = 0.5) +
+    geom_point(size = 1) +
+    # Removed title; only x and y labels are provided
+    labs(x = "Year",
+					y = expression("Sugar Production (kt " ~ y^{-1} ~ ")")) +
+    # Increase base font size for all text elements and remove legend title
+    theme_minimal(base_size = 16) +
+    theme(legend.position = "bottom",
+          legend.title = element_blank()) +
+    # Divide tick values by 1,000 for display (converting metric tons to kilotons)
+    scale_y_continuous(labels = function(x) scales::comma(x / 1000))
+  
+  # Apply custom colors if provided
+  if (!is.null(custom_colors)) {
+    p <- p + scale_color_manual(values = custom_colors)
+  }
+  
+  # Return the plot object for further customization or display
+  return(p)
+}
+
+# -----------------------------------------------------------------------------
+# Example usage:
+# -----------------------------------------------------------------------------
+# (Assuming `global_combined_expanded` is your data frame)
+custom_colors <- c("North America" = "blue")
+
+p <- plot_total_sugar_production(
+  region_data         = global_combined_expanded,
+  region_name         = "Selected Countries",
+  exclude_countries   = c("Caribbean", "Asia", "Europe", "South America",
+                          "North America", "Central America", "Africa", "Oceania"),
+  selected_countries  = NULL,
+  group_by_subregion  = FALSE,
+  group_by_region     = FALSE,
+  group_by_empire     = FALSE,
+  group_by_historical_empire = FALSE,
+  start_year          = 1420,
+  end_year            = 1600,
+  custom_colors       = NULL  # or use custom_colors
+)
+
+# To display the plot:
+print(p)
