@@ -1,0 +1,113 @@
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Function to plot a proportional stacked area chart for both global and regional data
+plot_proportional_stacked_area <- function(region_data, region_name, historical_empire = NULL,
+                                           region_big = NULL, subregion = NULL, selected_countries = NULL,
+                                           exclude_countries = NULL, group_by_region = FALSE,
+                                           group_by_subregion = FALSE, group_by_empire = FALSE,
+                                           start_year, end_year) {
+  
+  # Filter the data based on the selected/excluded countries, year range, historical empire, and region
+  region_filtered <- region_data %>%
+    # Filter by "Historical empire" if specified
+    filter(is.null(historical_empire) | `Historical empire` %in% historical_empire) %>%
+    # Filter by "Region Big" if specified
+    filter(is.null(region_big) | `Region Big` %in% region_big) %>%
+    # Filter by "Subregion" if specified
+    filter(is.null(subregion) | `Subregion` %in% subregion) %>%
+    # Include only the selected countries if specified
+    filter(is.null(selected_countries) | `Modern name` %in% selected_countries) %>%
+    # Exclude specified countries if any
+    filter(is.null(exclude_countries) | !`Modern name` %in% exclude_countries) %>%
+    # Filter by year range
+    filter(Year >= start_year & Year <= end_year) %>%
+    # Ensure we exclude rows where Total_Sugar_Production is NA
+    filter(!is.na(Total_Sugar_Production))
+  
+  # Determine the grouping and calculate production proportion accordingly
+  if (group_by_empire) {
+    region_filtered <- region_filtered %>%
+      group_by(Year, `Historical empire`) %>%
+      summarize(Total_Sugar_Production = sum(Total_Sugar_Production, na.rm = TRUE),
+                .groups = 'drop') %>%
+      group_by(Year) %>%
+      mutate(Production_Proportion = Total_Sugar_Production / sum(Total_Sugar_Production, na.rm = TRUE))
+    fill_variable <- "Historical empire"
+  } else if (group_by_region) {
+    region_filtered <- region_filtered %>%
+      filter(`Modern name` != region_name) %>%  # Exclude the region name itself
+      group_by(Year, `Region Big`) %>%
+      summarize(Total_Sugar_Production = sum(Total_Sugar_Production, na.rm = TRUE),
+                .groups = 'drop') %>%
+      group_by(Year) %>%
+      mutate(Production_Proportion = Total_Sugar_Production / sum(Total_Sugar_Production, na.rm = TRUE))
+    fill_variable <- "Region Big"
+  } else if (group_by_subregion) {
+    region_filtered <- region_filtered %>%
+      group_by(Year, `Subregion`) %>%
+      summarize(Total_Sugar_Production = sum(Total_Sugar_Production, na.rm = TRUE),
+                .groups = 'drop') %>%
+      group_by(Year) %>%
+      mutate(Production_Proportion = Total_Sugar_Production / sum(Total_Sugar_Production, na.rm = TRUE))
+    fill_variable <- "Subregion"
+  } else {
+    region_filtered <- region_filtered %>%
+      group_by(Year, `Modern name`) %>%
+      mutate(Total_Year_Production = sum(Total_Sugar_Production, na.rm = TRUE)) %>%
+      mutate(Production_Proportion = Total_Sugar_Production / Total_Year_Production) %>%
+      ungroup() %>%
+      filter(Total_Year_Production > 0)
+    fill_variable <- "Modern name"
+  }
+  
+  # Define your custom color palette
+  custom_colors <- c(
+    "Asia" = "#1f78b4",       # Blue - calm and professional
+    "Africa" = "#33a02c",     # Green - vibrant and natural
+    "Central America" = "#e31a1c",  # Red - attention-grabbing and bold
+    "North America" = "#ff7f00",     # Orange - warm and energetic
+    "Oceania" = "#6a3d9a",    # Purple - sophisticated and vibrant
+    "South America" = "#b15928",     # Brown - earthy and grounded
+    "Europe" = "#a6cee3",     # Light Blue - fresh and balanced
+    "Caribbean" = "#b2df8a",   # Light Green - relaxed and natural
+    "East Atlantic" = "#fdbf6f"
+  )
+  
+  ggplot(region_filtered, aes(x = Year, y = Production_Proportion, fill = .data[[fill_variable]])) +
+    geom_area(position = "fill") +  # Stacked area chart for proportions, ensuring it always adds up to 100%
+    scale_y_continuous(labels = scales::percent) +  # Convert y-axis to percentage
+    scale_fill_manual(values = custom_colors, na.translate = FALSE) +  # Custom colors
+    labs(
+      x = "Year",
+      y = "Proportion of Total Sugar Production",
+      fill = ""  # Example: Change this to your desired legend title
+      
+    ) +
+    theme_minimal() +
+    theme(
+      text = element_text(size = 14),         # Base text size
+      axis.title.x = element_text(size = 16), # X-axis label size
+      axis.title.y = element_text(size = 16), # Y-axis label size
+      axis.text.x = element_text(size = 12),  # X-axis tick label size
+      axis.text.y = element_text(size = 12),  # Y-axis tick label size
+      legend.title = element_text(size = 14), # Legend title size
+      legend.text = element_text(size = 12),  # Legend item text size
+      plot.title = element_text(size = 18, face = "bold"), # Title size
+      legend.position = "bottom"             # Place legend at the bottom
+    )
+}
+
+# Example usage for global dataset, focusing on region sums
+plot_proportional_stacked_area(
+  region_data = global_combined_expanded,    # The dataset for the global data with notes
+  region_name = "World",                # Name to display in the title (e.g., "World")
+  # historical_empire = c("British", "Spanish"),  # Filter by specific empires
+  # region_big = c("Caribbean", "Africa", "North America", "South America", "Central America", "Europe", "Asia"),  # Filter by specific regions
+  exclude_countries = c("Caribbean", "Asia", "Europe", "South America", "North America", "Central America", "Africa"),
+  group_by_region = TRUE,               # Group by region
+  group_by_empire = FALSE,                # Group by empire
+  start_year = 1450,                    # Start year for the plot
+  end_year = 2020                       # End year for the plot
+)
