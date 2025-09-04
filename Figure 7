@@ -32,6 +32,7 @@ create_scatter_plot <- function(data, start_year, end_year, x_limits = NULL, y_l
   # Scatter plot for averaged data
   plot <- ggplot(averaged_data, aes(x = Avg_Production, y = Avg_Export, label = `Modern name`)) +
     geom_point(aes(color = Avg_Export_to_Production_Ratio), size = 3) +
+    geom_abline(intercept = 0, slope = 1, color = "grey50", linetype = "solid") +
     geom_text(hjust = 1.1, vjust = 1.1, size = 3, color = "black") +  # Label all points
     scale_color_gradient(
       low = "blue", 
@@ -94,3 +95,4 @@ grid.arrange(
 # Display top 10 countries for each plot
 top10_1720_1914
 top10_1975_2022
+
