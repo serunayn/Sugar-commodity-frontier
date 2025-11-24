@@ -118,10 +118,10 @@ plot_total_sugar_production_with_region_or_empire <- function(
     region_filtered,
     aes(x = Year, y = Total_Sugar_Production)
   ) +
-    geom_area(aes(fill = .data[[color_variable]]), alpha = 0.6, position = "stack", show.legend = FALSE) +
+    geom_area(aes(fill = .data[[color_variable]]), alpha = 1, position = "stack", show.legend = FALSE) +
     labs(
-		  x = "Year",
-		  y = if (show_y_label) expression("Sugar Production (kt " ~ y^{-1} ~ ")")
+      x = "Year",
+      y = if (show_y_label) expression("Sugar Production (kt " ~ y^{-1} ~ ")")
     ) +
     theme_minimal() +
     scale_y_continuous(
@@ -133,6 +133,10 @@ plot_total_sugar_production_with_region_or_empire <- function(
       na.translate = FALSE,
       drop = FALSE
     ) +
+    scale_x_continuous(
+      expand = c(0, 0),
+      limits = c(start_year, end_year)
+    )+
     guides(
       fill = "none",
       linetype = "none",
@@ -198,7 +202,7 @@ plot1 <- plot_total_sugar_production_with_region_or_empire(
   group_by_region = TRUE,
   group_by_empire = FALSE,
   group_by_historical_empire = FALSE,
-  start_year = 1420,
+  start_year = 1440,
   end_year = 1620,
   annotations = annotations_df_1,
   show_y_label = TRUE
@@ -274,7 +278,7 @@ plot_top <- plot_total_sugar_production_with_region_or_empire(
   group_by_region = TRUE,
   group_by_empire = FALSE,
   group_by_historical_empire = FALSE,
-  start_year = 1420,
+  start_year = 1450,
   end_year = 2022,
   annotations = annotations_df_top,
   show_y_label = TRUE
